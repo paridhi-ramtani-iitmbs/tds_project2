@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Quiz Solver</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-slate-900 text-white p-10">
+    <div class="max-w-2xl mx-auto bg-slate-800 p-8 rounded">
+        <h1 class="text-2xl font-bold mb-4">LLM Quiz Solver</h1>
+        
+        <div class="space-y-4">
+            <input id="email" placeholder="Email" class="w-full p-2 bg-slate-700 rounded">
+            <input id="secret" placeholder="Secret" class="w-full p-2 bg-slate-700 rounded">
+            <input id="url" placeholder="Quiz URL" class="w-full p-2 bg-slate-700 rounded">
+            <button onclick="run()" class="bg-blue-600 px-4 py-2 rounded font-bold w-full">Start Solver</button>
+        </div>
+
+        <div class="mt-8">
+            <h3 class="font-bold">Logs:</h3>
+            <pre id="logs" class="text-xs text-green-400 mt-2 bg-black p-4 rounded h-64 overflow-auto"></pre>
+        </div>
+    </div>
+
+    <script>
+        async function run() {
+            const email = document.getElementById('email').value;
+            const secret = document.getElementById('secret').value;
+            const url = document.getElementById('url').value;
+            
+            const res = await fetch('/run', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({email, secret, url})
+            });
+            const data = await res.json();
+            
+            if(data.task_id) poll(data.task_id);
+        }
+
+        function poll(taskId) {
+            setInterval(async () => {
+                const res = await fetch(`/tasks/${taskId}`);
+                const data = await res.json();
+                document.getElementById('logs').textContent = data.logs.join('\n');
+            }, 2000);
+        }
+    </script>
+</body>
+</html>
