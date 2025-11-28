@@ -18,4 +18,4 @@ jobs:
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
         # REPLACE THE TWO VALUES BELOW WITH YOUR INFO:
-        run: git push https://oauth2:$HF_TOKEN@huggingface.co/spaces/paridhi-ramtani-iitmbs/tds_project2 main
+        run: git push --force https://oauth2:$HF_TOKEN@huggingface.co/spaces/paridhi-ramtani-iitmbs/tds_project2 main
