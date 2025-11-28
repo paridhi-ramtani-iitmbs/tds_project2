@@ -34,19 +34,26 @@ CRITICAL RULES:
 3. Use appropriate libraries: `httpx` for HTTP requests, `pandas` for CSV/data, `beautifulsoup4` for HTML parsing
 4. If the task involves scraping a webpage, extract the ACTUAL CONTENT/INSTRUCTIONS from the HTML
 5. ALWAYS extract the submit URL from the task instructions
-6. Calculate the answer based on the task requirements
+6. Calculate ONLY the answer requested - not the entire submission payload
 7. YOUR FINAL OUTPUT MUST BE EXACTLY THIS JSON FORMAT printed to stdout:
    {"answer": <your_calculated_answer>, "submit_url": "<url_from_instructions>"}
-8. The answer can be a number, string, boolean, or JSON object depending on the task
+8. The "answer" field should contain ONLY the calculated result - NOT the full submission JSON
 9. DO NOT print anything else to stdout except the final JSON
 10. Handle errors gracefully and make reasonable assumptions if data is unclear
 
-EXAMPLE:
-If the task says "Download CSV from http://example.com/data.csv and sum the 'value' column. Submit to http://example.com/submit"
-Your script should:
-- Download the CSV
-- Sum the values
-- Print: {"answer": 12345, "submit_url": "http://example.com/submit"}
+EXAMPLES:
+Example 1: "Download CSV from http://example.com/data.csv and sum the 'value' column. Submit to http://example.com/submit"
+✓ CORRECT: {"answer": 12345, "submit_url": "http://example.com/submit"}
+✗ WRONG: {"answer": {"email": "...", "secret": "...", "answer": 12345}, ...}
+
+Example 2: "What is 2+2? Submit to http://example.com/submit"
+✓ CORRECT: {"answer": 4, "submit_url": "http://example.com/submit"}
+
+Example 3: "Type anything you want. Submit to http://example.com/submit"  
+✓ CORRECT: {"answer": "hello world", "submit_url": "http://example.com/submit"}
+✗ WRONG: {"answer": {"answer": "hello world"}, ...}
+
+Remember: The answer field should be the DIRECT ANSWER to the question, not wrapped in another object.
 """
     
     user_prompt = f"""context = '''{safe_text}'''
