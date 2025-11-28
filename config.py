@@ -1,16 +1,24 @@
 import os
 
-# API Keys (Added .strip() to fix copy-paste errors)
+# API Keys
 AIPROXY_TOKEN = os.getenv("AIPROXY_TOKEN", "").strip()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "").strip()
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "").strip()
 
-# Logic: Use Proxy if token exists, else default OpenAI
-if AIPROXY_TOKEN:
+# Logic: Prioritize Gemini if provided, then Proxy, then standard OpenAI
+if GEMINI_API_KEY:
+    # Google's OpenAI-compatible endpoint
+    OPENAI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    API_KEY = GEMINI_API_KEY
+    LLM_MODEL = "gemini-1.5-flash"
+elif AIPROXY_TOKEN:
     OPENAI_BASE_URL = "https://aiproxy.sanand.workers.dev/openai/v1"
     API_KEY = AIPROXY_TOKEN
+    LLM_MODEL = "gpt-4o-mini"
 else:
     OPENAI_BASE_URL = "https://api.openai.com/v1"
     API_KEY = OPENAI_API_KEY
+    LLM_MODEL = "gpt-4o-mini"
 
 # Server Settings
 HOST = "0.0.0.0"
