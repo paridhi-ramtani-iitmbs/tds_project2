@@ -22,27 +22,41 @@ def solve_challenge(task_text: str):
     safe_text = task_text.replace('"""', "'''")
     
     system_prompt = """
-You are a Python Data Analyst.
-Goal: Write a script to solve the user's question.
+You are a Python Data Analyst expert at solving quiz tasks.
+Your goal: Write a COMPLETE Python script to solve the user's question.
 
-Environment:
-- Python 3.10
-- Libraries: pandas, numpy, requests, httpx, beautifulsoup4, pdfplumber, pytesseract, PIL, sklearn.
-- Workdir: /app (You can save temp files here).
+CRITICAL RULES:
+1. The task description is in the variable `context`. CAREFULLY READ AND PARSE IT.
+2. The task may include:
+   - Instructions to download/fetch data from URLs (CSV, PDF, API, web pages)
+   - Data processing requirements (cleaning, filtering, aggregating)
+   - A submission URL where you need to POST the answer
+3. Use appropriate libraries: `httpx` for HTTP requests, `pandas` for CSV/data, `beautifulsoup4` for HTML parsing
+4. If the task involves scraping a webpage, extract the ACTUAL CONTENT/INSTRUCTIONS from the HTML
+5. ALWAYS extract the submit URL from the task instructions
+6. Calculate the answer based on the task requirements
+7. YOUR FINAL OUTPUT MUST BE EXACTLY THIS JSON FORMAT printed to stdout:
+   {"answer": <your_calculated_answer>, "submit_url": "<url_from_instructions>"}
+8. The answer can be a number, string, boolean, or JSON object depending on the task
+9. DO NOT print anything else to stdout except the final JSON
+10. Handle errors gracefully and make reasonable assumptions if data is unclear
 
-Rules:
-1. Parse the `context` variable to understand the task.
-2. The `context` contains the TEXT of the webpage.
-3. EXTRACT the question and any URLs from the `context`. 
-4. DO NOT INVENT URLS. If a URL is not in the context, do not use it.
-5. If the task requires downloading a file (CSV, PDF, Image), use `requests` to download it.
-6. Calculate the ANSWER.
-7. FINAL OUTPUT must be JSON printed to stdout:
-   {"answer": <calculated_value>, "submit_url": "<url_found_in_context>"}
-8. Do not print debug info to stdout.
-    """
+EXAMPLE:
+If the task says "Download CSV from http://example.com/data.csv and sum the 'value' column. Submit to http://example.com/submit"
+Your script should:
+- Download the CSV
+- Sum the values
+- Print: {"answer": 12345, "submit_url": "http://example.com/submit"}
+"""
     
-    user_prompt = f"context = \"\"\"{safe_text}\"\"\"\n\nWrite the script."
+    user_prompt = f"""context = '''{safe_text}'''
+
+Write a complete Python script to solve this task. Remember:
+- Parse the context carefully to understand what's being asked
+- Extract the submission URL from the context
+- Calculate/fetch the required answer
+- Output ONLY the JSON: {{"answer": <result>, "submit_url": "<url>"}}
+"""
 
     # Try each API in order until one succeeds
     for idx, config in enumerate(API_CONFIGS):
@@ -51,7 +65,9 @@ Rules:
             
             client = OpenAI(
                 api_key=config["api_key"],
-                base_url=config["base_url"]
+                base_url=config["base_url"],
+                timeout=60.0,  # Increased timeout
+                max_retries=2  # Reduced retries to fail faster
             )
             
             response = client.chat.completions.create(
@@ -60,7 +76,7 @@ Rules:
                     {"role": "system", "content": system_prompt},
                     {"role": "user", "content": user_prompt}
                 ],
-                temperature=0
+                temperature=0.1  # Slightly higher for better reasoning
             )
             
             llm_output = response.choices[0].message.content
@@ -76,12 +92,13 @@ Rules:
             return execute_and_parse(code.strip())
 
         except Exception as e:
-            logger.warning(f"✗ {config['name']} API failed: {e}")
+            error_msg = str(e)
+            logger.warning(f"✗ {config['name']} API failed: {error_msg}")
             
             # If this was the last API, return the error
             if idx == len(API_CONFIGS) - 1:
                 logger.error("All APIs failed!")
-                return {"error": f"All APIs failed. Last error: {str(e)}"}
+                return {"error": f"All APIs failed. Last error: {error_msg}"}
             
             # Otherwise, continue to next API
             logger.info(f"Falling back to next API...")
@@ -90,8 +107,21 @@ Rules:
 def execute_and_parse(code: str):
     filename = f"task_{uuid.uuid4().hex}.py"
     try:
+        # Add error handling wrapper to the code
+        wrapped_code = f"""
+import sys
+import traceback
+
+try:
+{chr(10).join('    ' + line for line in code.split(chr(10)))}
+except Exception as e:
+    print('{{"error": "Script execution error: ' + str(e).replace('"', "'") + '"}}', file=sys.stderr)
+    traceback.print_exc(file=sys.stderr)
+    sys.exit(1)
+"""
+        
         with open(filename, "w") as f:
-            f.write(code)
+            f.write(wrapped_code)
         
         logger.info(f"Executing generated script: {filename}")
         
@@ -100,24 +130,38 @@ def execute_and_parse(code: str):
             [sys.executable, filename],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=45  # Increased timeout for data processing
         )
         
-        output = result.stdout
-        if result.stderr:
-            logger.warning(f"Script stderr: {result.stderr}")
+        output = result.stdout.strip()
+        stderr = result.stderr.strip()
+        
+        if stderr:
+            logger.warning(f"Script stderr: {stderr}")
+        
+        if not output:
+            logger.error("Script produced no output")
+            return {"error": "Script produced no output", "stderr": stderr}
 
         # Robust JSON Extraction using Regex
         # Looks for the last occurrence of {...}
-        matches = re.findall(r'\{.*\}', output, re.DOTALL)
-        if matches:
-            parsed = json.loads(matches[-1])
-            logger.info(f"Parsed result: {parsed}")
-            return parsed
+        matches = re.findall(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', output, re.DOTALL)
         
-        logger.error(f"No JSON found in output: {output}")
-        return {"error": "No JSON found in output", "raw": output}
+        if matches:
+            try:
+                parsed = json.loads(matches[-1])
+                logger.info(f"Parsed result: {parsed}")
+                return parsed
+            except json.JSONDecodeError as e:
+                logger.error(f"JSON parse error: {e}")
+                logger.error(f"Attempted to parse: {matches[-1][:200]}")
+        
+        logger.error(f"No valid JSON found in output: {output[:500]}")
+        return {"error": "No valid JSON found in output", "raw": output[:1000]}
 
+    except subprocess.TimeoutExpired:
+        logger.error("Script execution timeout")
+        return {"error": "Script execution timeout (45s)"}
     except Exception as e:
         logger.error(f"Execution failed: {e}")
         return {"error": f"Execution failed: {e}"}
