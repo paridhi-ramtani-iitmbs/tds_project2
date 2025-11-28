@@ -8,3 +8,8 @@ beautifulsoup4
 pandas
 numpy
 requests
+pdfplumber
+pytesseract
+Pillow
+scikit-learn
+scipy
