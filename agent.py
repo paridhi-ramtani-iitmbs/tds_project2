@@ -13,34 +13,36 @@ logger = logging.getLogger("uvicorn")
 client = OpenAI(api_key=API_KEY, base_url=OPENAI_BASE_URL)
 
 def solve_challenge(task_text: str):
-    """
-    1. Ask LLM to write code based on task_text.
-    2. Execute code.
-    3. Parse JSON output.
-    """
     logger.info("Generating solution code...")
     
-    # Escape triple quotes to prevent syntax errors in the prompt
+    # Escape triple quotes
     safe_text = task_text.replace('"""', "'''")
     
     system_prompt = """
-You are a Python Data Analyst. 
-Your goal: Write a Python script to solve the user's question.
+You are a Python Data Analyst.
+Goal: Write a script to solve the user's question.
+
+Environment:
+- Python 3.10
+- Libraries: pandas, numpy, requests, httpx, beautifulsoup4, pdfplumber, pytesseract, PIL, sklearn.
+- Workdir: /app (You can save temp files here).
 
 Rules:
-1. The user's task description is in the variable `context`. Parse it.
-2. If the task involves a URL (CSV/API), use `httpx` or `pandas` to fetch it.
-3. Compute the answer.
-4. FINAL OUTPUT MUST be a valid JSON string printed to stdout:
-   {"answer": <calculated_value>, "submit_url": "<url_to_submit>"}
-5. Do NOT print anything else to stdout.
+1. Parse the `context` variable to understand the task.
+2. If the task requires downloading a file (CSV, PDF, Image), use `requests` to download it to the current directory.
+3. If it's a PDF, use `pdfplumber`. If it's an image, use `pytesseract`.
+4. Calculate the ANSWER.
+5. Identify the SUBMIT_URL from the text.
+6. FINAL OUTPUT must be JSON printed to stdout:
+   {"answer": <calculated_value>, "submit_url": "<url>"}
+7. Do not print debug info to stdout.
     """
     
     user_prompt = f"context = \"\"\"{safe_text}\"\"\"\n\nWrite the script."
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # Use mini to save cost, switch to gpt-4o if needed
+            model="gpt-4o-mini",
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -49,12 +51,12 @@ Rules:
         )
         llm_output = response.choices[0].message.content
         
-        # Extract code block
+        # Extract code
         code = llm_output
         if "```python" in code:
             code = code.split("```python")[1].split("```")[0]
         elif "```" in code:
-            code = code.replace("```", "")
+            code = code.split("```")[1].split("```")[0]
             
         return execute_and_parse(code.strip())
 
@@ -68,26 +70,32 @@ def execute_and_parse(code: str):
         with open(filename, "w") as f:
             f.write(code)
             
-        # Run the script
         result = subprocess.run(
             [sys.executable, filename],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=45 # Increased timeout for download/OCR
         )
         
         output = result.stdout
+        
+        # Log stderr if any (for debugging via internal logs)
         if result.stderr:
-            logger.warning(f"Script stderr: {result.stderr}")
+            logger.info(f"Script stderr: {result.stderr}")
 
-        # Robust JSON Extraction using Regex
-        # Looks for the last occurrence of {...}
+        # Extract JSON
         matches = re.findall(r'\{.*\}', output, re.DOTALL)
         if matches:
-            return json.loads(matches[-1])
+            # Pick the last JSON object found
+            try:
+                return json.loads(matches[-1])
+            except:
+                pass
         
-        return {"error": "No JSON found in output", "raw": output}
+        return {"error": "No JSON found", "raw": output, "stderr": result.stderr}
 
+    except subprocess.TimeoutExpired:
+        return {"error": "Script timed out"}
     except Exception as e:
         return {"error": f"Execution failed: {e}"}
     finally:
