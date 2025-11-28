@@ -17,23 +17,22 @@ USER_SECRET = os.getenv("USER_SECRET", "default_secret").strip()
 API_CONFIGS = []
 
 if GEMINI_API_KEY:
-    # Note: Google's docs show TWO possible base URLs:
-    # 1. https://generativelanguage.googleapis.com/v1beta/openai/ (newer, recommended)
-    # 2. https://generativelanguage.googleapis.com/v1beta/ (older, also works)
-    # We'll try both in fallback
+    # Using the latest Gemini models with OpenAI compatibility
+    # Base URL: https://generativelanguage.googleapis.com/v1beta/openai/
+    # Valid models: gemini-2.5-flash, gemini-2.0-flash, gemini-3-pro-preview, etc.
     API_CONFIGS.append({
-        "name": "Gemini (new endpoint)",
+        "name": "Gemini 2.5 Flash",
         "api_key": GEMINI_API_KEY,
         "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "model": "gemini-1.5-flash"
+        "model": "gemini-2.5-flash"
     })
     API_CONFIGS.append({
-        "name": "Gemini (legacy endpoint)",
+        "name": "Gemini 2.0 Flash",
         "api_key": GEMINI_API_KEY,
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/",
-        "model": "gemini-1.5-flash"
+        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
+        "model": "gemini-2.0-flash"
     })
-    logger.info("✓ Gemini API configured (both endpoints)")
+    logger.info("✓ Gemini API configured (2.5 Flash + 2.0 Flash)")
 
 if AIPROXY_TOKEN:
     API_CONFIGS.append({
