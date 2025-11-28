@@ -22,16 +22,24 @@ def solve_challenge(task_text: str):
     safe_text = task_text.replace('"""', "'''")
     
     system_prompt = """
-You are a Python Data Analyst. 
-Your goal: Write a Python script to solve the user's question.
+You are a Python Data Analyst.
+Goal: Write a script to solve the user's question.
+
+Environment:
+- Python 3.10
+- Libraries: pandas, numpy, requests, httpx, beautifulsoup4, pdfplumber, pytesseract, PIL, sklearn.
+- Workdir: /app (You can save temp files here).
 
 Rules:
-1. The user's task description is in the variable `context`. Parse it.
-2. If the task involves a URL (CSV/API), use `httpx` or `pandas` to fetch it.
-3. Compute the answer.
-4. FINAL OUTPUT MUST be a valid JSON string printed to stdout:
-   {"answer": <calculated_value>, "submit_url": "<url_to_submit>"}
-5. Do NOT print anything else to stdout.
+1. Parse the `context` variable to understand the task.
+2. The `context` contains the TEXT of the webpage.
+3. EXTRACT the question and any URLs from the `context`. 
+4. DO NOT INVENT URLS. If a URL is not in the context, do not use it.
+5. If the task requires downloading a file (CSV, PDF, Image), use `requests` to download it.
+6. Calculate the ANSWER.
+7. FINAL OUTPUT must be JSON printed to stdout:
+   {"answer": <calculated_value>, "submit_url": "<url_found_in_context>"}
+8. Do not print debug info to stdout.
     """
     
     user_prompt = f"context = \"\"\"{safe_text}\"\"\"\n\nWrite the script."
