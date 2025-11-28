@@ -6,7 +6,8 @@ import sys
 import uuid
 import logging
 from openai import OpenAI
-from config import API_KEY, OPENAI_BASE_URL
+# IMPORT LLM_MODEL HERE
+from config import API_KEY, OPENAI_BASE_URL, LLM_MODEL
 
 logger = logging.getLogger("uvicorn")
 
@@ -15,7 +16,6 @@ client = OpenAI(api_key=API_KEY, base_url=OPENAI_BASE_URL)
 def solve_challenge(task_text: str):
     logger.info("Generating solution code...")
     
-    # Escape triple quotes
     safe_text = task_text.replace('"""', "'''")
     
     system_prompt = """
@@ -42,7 +42,7 @@ Rules:
 
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model=LLM_MODEL,  # <--- THIS MUST BE THE VARIABLE, NOT "gpt-4o-mini"
             messages=[
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_prompt}
@@ -51,7 +51,6 @@ Rules:
         )
         llm_output = response.choices[0].message.content
         
-        # Extract code
         code = llm_output
         if "```python" in code:
             code = code.split("```python")[1].split("```")[0]
@@ -74,19 +73,16 @@ def execute_and_parse(code: str):
             [sys.executable, filename],
             capture_output=True,
             text=True,
-            timeout=45 # Increased timeout for download/OCR
+            timeout=45
         )
         
         output = result.stdout
         
-        # Log stderr if any (for debugging via internal logs)
         if result.stderr:
             logger.info(f"Script stderr: {result.stderr}")
 
-        # Extract JSON
         matches = re.findall(r'\{.*\}', output, re.DOTALL)
         if matches:
-            # Pick the last JSON object found
             try:
                 return json.loads(matches[-1])
             except:
