@@ -1,12 +1,8 @@
 FROM python:3.10-slim
 
-# Set working directory
 WORKDIR /app
 
-# 1. Install system dependencies
-# chromium: for Playwright
-# tesseract-ocr: for vision tasks
-# git/wget: utilities
+# 1. Install basic system dependencies
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -15,30 +11,30 @@ RUN apt-get update && apt-get install -y \
     libtesseract-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# 2. Setup a non-root user (Required for Hugging Face)
-RUN useradd -m -u 1000 user
-# Give the user ownership of the app directory
-RUN chown -R user:user /app
-
-# 3. Switch to non-root user
-USER user
-
-# 4. Set Environment variables for Path
-ENV PATH="/home/user/.local/bin:$PATH"
-
-# 5. Copy requirements and install Python dependencies
-COPY --chown=user requirements.txt .
+# 2. Install Python dependencies (As root)
+COPY requirements.txt .
 RUN pip install --no-cache-dir --upgrade pip && \
     pip install --no-cache-dir -r requirements.txt
 
-# 6. Install Playwright Browsers (Chromium only)
-RUN playwright install --with-deps chromium
+# 3. Install Playwright Browsers & System Deps (As root)
+# We set a custom path so we can give the user permission to access it later
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN mkdir /ms-playwright && \
+    playwright install --with-deps chromium
 
-# 7. Copy Code (with correct ownership)
+# 4. Setup non-root user (Required for Hugging Face)
+RUN useradd -m -u 1000 user
+
+# 5. Fix permissions: Give user ownership of app AND browser binaries
+RUN chown -R user:user /app && \
+    chown -R user:user /ms-playwright
+
+# 6. Copy Code
 COPY --chown=user . .
 
-# 8. Expose Hugging Face default port
-EXPOSE 7860
+# 7. Switch to non-root user
+USER user
 
-# 9. Run application on port 7860
+# 8. Run
+EXPOSE 7860
 CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "7860"]
